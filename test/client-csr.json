@@ -1,0 +1,17 @@
+{
+    "CN": "client",
+    "hosts": [""],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "US",
+            "L": "Los Angeles",
+            "ST": "California",
+            "O": "My Awesome Company",
+            "OU": "Distributed Services"
+        }
+    ]
+}

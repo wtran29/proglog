@@ -17,10 +17,7 @@ type segment struct {
 }
 
 func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
-	s := &segment{
-		baseOffset: baseOffset,
-		config:     c,
-	}
+	s := &segment{baseOffset: baseOffset, config: c}
 	var err error
 	storeFile, err := os.OpenFile(
 		path.Join(dir, fmt.Sprintf("%d%s", baseOffset, ".store")),

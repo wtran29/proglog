@@ -20,6 +20,22 @@ type Log struct {
 	segments      []*segment
 }
 
+const (
+	DefaultMaxStoreBytes uint64 = 1024
+	DefaultMaxIndexBytes uint64 = 1024
+)
+
+func (l *Log) newSegment(off uint64) error {
+	s, err := newSegment(l.Dir, off, l.Config)
+	if err != nil {
+		return err
+	}
+
+	l.segments = append(l.segments, s)
+	l.activeSegment = s
+	return nil
+}
+
 func NewLog(dir string, c Config) (*Log, error) {
 	if c.Segment.MaxStoreBytes == 0 {
 		c.Segment.MaxStoreBytes = 1024
@@ -41,10 +57,12 @@ func (l *Log) setup() error {
 	}
 	var baseOffsets []uint64
 	for _, file := range files {
-		offStr := strings.TrimSuffix(
-			file.Name(),
-			path.Ext(file.Name()),
-		)
+		fileExt := path.Ext(file.Name())
+
+		if fileExt != ".store" {
+			continue
+		}
+		offStr := strings.TrimSuffix(file.Name(), path.Ext(file.Name()))
 		off, _ := strconv.ParseUint(offStr, 10, 0)
 		baseOffsets = append(baseOffsets, off)
 	}
@@ -177,14 +195,4 @@ func (o *originReader) Read(p []byte) (int, error) {
 	n, err := o.ReadAt(p, o.off)
 	o.off += int64(n)
 	return n, err
-}
-
-func (l *Log) newSegment(off uint64) error {
-	s, err := newSegment(l.Dir, off, l.Config)
-	if err != nil {
-		return err
-	}
-	l.segments = append(l.segments, s)
-	l.activeSegment = s
-	return nil
 }

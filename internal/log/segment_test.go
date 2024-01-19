@@ -35,7 +35,7 @@ func TestSegment(t *testing.T) {
 	}
 
 	_, err = s.Append(want)
-	require.Equal(t, io.EOF, err)
+	require.ErrorIs(t, err, io.EOF)
 
 	// maxed index
 	require.True(t, s.IsMaxed())

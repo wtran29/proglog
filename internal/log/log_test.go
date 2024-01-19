@@ -2,7 +2,6 @@ package log
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -12,9 +11,7 @@ import (
 )
 
 func TestLog(t *testing.T) {
-	for scenario, fn := range map[string]func(
-		t *testing.T, log *Log,
-	){
+	for scenario, fn := range map[string]func(t *testing.T, log *Log){
 		"append and read a record succeeds": testAppendRead,
 		"offset out of range error":         testOutOfRangeErr,
 		"init with existing segments":       testInitExisting,
@@ -22,7 +19,7 @@ func TestLog(t *testing.T) {
 		"truncate":                          testTruncate,
 	} {
 		t.Run(scenario, func(t *testing.T) {
-			dir, err := ioutil.TempDir("", "store-test")
+			dir, err := os.MkdirTemp("", "log-test")
 			require.NoError(t, err)
 			defer os.RemoveAll(dir)
 
@@ -40,16 +37,17 @@ func TestLog(t *testing.T) {
 
 // START: append_read
 func testAppendRead(t *testing.T, log *Log) {
-	append := &api.Record{
+	t.Helper()
+	record := &api.Record{
 		Value: []byte("hello world"),
 	}
-	off, err := log.Append(append)
+	off, err := log.Append(record)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), off)
 
 	read, err := log.Read(off)
 	require.NoError(t, err)
-	require.Equal(t, append.Value, read.Value)
+	require.Equal(t, record.Value, read.Value)
 }
 
 // END: append_read
@@ -115,6 +113,7 @@ func testReader(t *testing.T, log *Log) {
 
 // tests that we can remove the log and old segments that are not needed
 func testTruncate(t *testing.T, log *Log) {
+	t.Helper()
 	append := &api.Record{
 		Value: []byte("hello world"),
 	}
