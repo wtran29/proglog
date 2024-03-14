@@ -15,6 +15,7 @@ import (
 	"github.com/wtran29/proglog/internal/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 )
 
 func TestAgent(t *testing.T) {
@@ -39,7 +40,8 @@ func TestAgent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var agents []*agent.Agent
+	// Setup a 3-node cluster with first node being the leader (initial cluster member).
+	agents := []*agent.Agent{}
 	for i := 0; i < 3; i++ {
 		ports := dynaport.Get(2)
 		bindAddr := fmt.Sprintf("%s:%d", "127.0.0.1", ports[0])
@@ -48,10 +50,11 @@ func TestAgent(t *testing.T) {
 		dataDir, err := os.MkdirTemp("", "agent-test-log")
 		require.NoError(t, err)
 
-		var startJoinAddrs []string
+		startJoinAddrs := []string{}
 		if i != 0 {
 			startJoinAddrs = append(startJoinAddrs, agents[0].Config.BindAddr)
 		}
+
 		agent, err := agent.New(agent.Config{
 			NodeName:        fmt.Sprintf("%d", i),
 			StartJoinAddrs:  startJoinAddrs,
@@ -62,15 +65,20 @@ func TestAgent(t *testing.T) {
 			ACLPolicyFile:   config.ACLPolicyFile,
 			ServerTLSConfig: serverTLSConfig,
 			PeerTLSConfig:   peerTLSConfig,
+			Bootstrap:       i == 0,
 		})
 		require.NoError(t, err)
 		agents = append(agents, agent)
 	}
+	// Defer cleanup for agents and data directories
 	defer func() {
 		for _, agent := range agents {
-			err := agent.Shutdown()
-			require.NoError(t, err)
-			require.NoError(t, os.RemoveAll(agent.Config.DataDir))
+			if err := agent.Shutdown(); err != nil {
+				t.Logf("Error shutting down agent: %s", err)
+			}
+			if err := os.RemoveAll(agent.Config.DataDir); err != nil {
+				t.Logf("Error removing data directory: %s", err)
+			}
 		}
 	}()
 	time.Sleep(3 * time.Second)
@@ -80,17 +88,23 @@ func TestAgent(t *testing.T) {
 	leaderClient := client(t, agents[0], peerTLSConfig)
 	produceResponse, err := leaderClient.Produce(context.Background(), &api.ProduceRequest{Record: &api.Record{Value: []byte("foo")}})
 	require.NoError(t, err)
+	// wait until replication has finished
+	time.Sleep(3 * time.Second)
 	consumeResponse, err := leaderClient.Consume(context.Background(), &api.ConsumeRequest{Offset: produceResponse.Offset})
 	require.NoError(t, err)
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
-
-	// wait until replication has finished
-	time.Sleep(3 * time.Second)
 
 	followerClient := client(t, agents[1], peerTLSConfig)
 	consumeResponse, err = followerClient.Consume(context.Background(), &api.ConsumeRequest{Offset: produceResponse.Offset})
 	require.NoError(t, err)
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
+
+	consumeResponse, err = leaderClient.Consume(context.Background(), &api.ConsumeRequest{Offset: produceResponse.Offset + 1})
+	require.Nil(t, consumeResponse)
+	require.Error(t, err)
+	got := status.Code(err)
+	want := status.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
+	require.Equal(t, got, want)
 
 }
 
@@ -99,7 +113,7 @@ func client(t *testing.T, agent *agent.Agent, tlsConfig *tls.Config) api.LogClie
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
 	rpcAddr, err := agent.Config.RPCAddr()
 	require.NoError(t, err)
-	conn, err := grpc.Dial(fmt.Sprintf("%s", rpcAddr), opts...)
+	conn, err := grpc.Dial(rpcAddr, opts...)
 	require.NoError(t, err)
 	client := api.NewLogClient(conn)
 	return client
