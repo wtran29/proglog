@@ -349,7 +349,7 @@ func (s *StreamLayer) Dial(addr raft.ServerAddress, timeout time.Duration) (net.
 	if err != nil {
 		return nil, err
 	}
-	// identify to mux this is a raft rpc
+	// identify to mux that this is a raft rpc
 	_, err = conn.Write([]byte{byte(RaftRPC)})
 	if err != nil {
 		return nil, err
@@ -427,4 +427,46 @@ func (l *DistributedLog) Join(id, addr string) error {
 func (l *DistributedLog) Leave(id string) error {
 	removeFuture := l.raft.RemoveServer(raft.ServerID(id), 0, 0)
 	return removeFuture.Error()
+}
+
+// WaitForLeader blocks until cluster has elected a leader or times out
+func (l *DistributedLog) WaitForLeader(timeout time.Duration) error {
+	timeoutc := time.After(timeout)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-timeoutc:
+			return fmt.Errorf("timed out")
+		case <-ticker.C:
+			if l := l.raft.Leader(); l != "" {
+				return nil
+			}
+		}
+	}
+}
+
+// Close shuts down the Raft instance and closes the local log.
+func (l *DistributedLog) Close() error {
+	f := l.raft.Shutdown()
+	if err := f.Error(); err != nil {
+		return err
+	}
+	return l.log.Close()
+}
+
+func (l *DistributedLog) GetServers() ([]*api.Server, error) {
+	future := l.raft.GetConfiguration()
+	if err := future.Error(); err != nil {
+		return nil, err
+	}
+	var servers []*api.Server
+	for _, server := range future.Configuration().Servers {
+		servers = append(servers, &api.Server{
+			Id:       string(server.ID),
+			RpcAddr:  string(server.Address),
+			IsLeader: l.raft.Leader() == server.Address,
+		})
+	}
+	return servers, nil
 }

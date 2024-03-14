@@ -151,7 +151,10 @@ func (l *Log) LowestOffset() (uint64, error) {
 func (l *Log) HighestOffset() (uint64, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	off := l.segments[len(l.segments)].nextOffset
+	if len(l.segments) == 0 {
+		return 0, nil
+	}
+	off := l.segments[len(l.segments)-1].nextOffset
 	if off == 0 {
 		return 0, nil
 	}
