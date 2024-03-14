@@ -50,6 +50,7 @@ require (
 	github.com/lib/pq v1.10.1 // indirect
 	github.com/mattn/go-sqlite3 v1.14.15 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/soheilhy/cmux v0.1.5
 	github.com/tysonmote/gommap v0.0.2 // indirect
 	github.com/weppos/publicsuffix-go v0.15.1-0.20210511084619-b1f36a2d6c0b // indirect
 	github.com/zmap/zcrypto v0.0.0-20210511125630-18f1e0152cfc // indirect

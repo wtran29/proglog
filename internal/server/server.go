@@ -28,8 +28,15 @@ type CommitLog interface {
 }
 
 type Config struct {
-	CommitLog  CommitLog
-	Authorizer Authorizer
+	CommitLog   CommitLog
+	Authorizer  Authorizer
+	GetServerer GetServerer
+}
+
+// GetServerer is an interface that holds the sole method to get servers. Keeping this method
+// separate from CommitLog since non-distributed log does not know about servers.
+type GetServerer interface {
+	GetServers() ([]*api.Server, error)
 }
 
 type Authorizer interface {
@@ -114,6 +121,14 @@ func (s *grpcServer) ConsumeStream(req *api.ConsumeRequest, stream api.Log_Consu
 			req.Offset++
 		}
 	}
+}
+
+func (s *grpcServer) GetServers(ctx context.Context, req *api.GetServersRequest) (*api.GetServersResponse, error) {
+	servers, err := s.GetServerer.GetServers()
+	if err != nil {
+		return nil, err
+	}
+	return &api.GetServersResponse{Servers: servers}, nil
 }
 
 func NewGRPCServer(config *Config, grpcOpts ...grpc.ServerOption) (*grpc.Server, error) {
