@@ -17,12 +17,31 @@ func TestMembership(t *testing.T) {
 	m, _ = setupMember(t, m)
 
 	require.Eventually(t, func() bool {
-		return 2 == len(handler.joins) &&
-			3 == len(m[0].Members()) &&
-			serf.StatusLeft == m[0].Members()[2].Status &&
-			1 == len(handler.leaves)
+		return len(handler.joins) == 2 &&
+			len(m[0].Members()) == 3 &&
+			len(handler.leaves) == 0
+	}, 3*time.Second, 250*time.Millisecond)
+	require.NoError(t, m[2].Leave())
+
+	require.Eventually(t, func() bool {
+		// fmt.Println("Joins:", len(handler.joins))
+		// fmt.Println("Members:", len(m[0].Members()))
+		// fmt.Println("Member[2] Status:", m[0].Members()[2].Status)
+		// fmt.Println("Leaves:", len(handler.leaves))
+		return len(handler.joins) == 2 &&
+			len(m[0].Members()) == 3 &&
+			m[0].Members()[2].Status == serf.StatusLeft &&
+			len(handler.leaves) == 1
 	}, 3*time.Second, 250*time.Millisecond)
 	require.Equal(t, fmt.Sprintf("%d", 2), <-handler.leaves)
+	// closeChannels(handler.joins, handler.leaves)
+}
+
+func closeChannels(joins chan map[string]string, leaves chan string) {
+	close(leaves)
+	for range joins {
+		// Drain the joins channel to ensure it's closed
+	}
 }
 
 func setupMember(t *testing.T, members []*Membership) ([]*Membership, *handler) {

@@ -3,6 +3,7 @@ package discovery
 import (
 	"net"
 
+	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
 	"go.uber.org/zap"
 )
@@ -59,6 +60,7 @@ func (m *Membership) setupSerf() (err error) {
 			return err
 		}
 	}
+	m.logger.Debug("Serf setup complete", zap.Any("config", config))
 	return nil
 }
 
@@ -82,7 +84,7 @@ func (m *Membership) eventHandler() {
 		case serf.EventMemberLeave, serf.EventMemberFailed:
 			for _, member := range e.(serf.MemberEvent).Members {
 				if m.isLocal(member) {
-					return
+					continue
 				}
 				m.handleLeave(member)
 			}
@@ -112,6 +114,11 @@ func (m *Membership) Leave() error {
 	return m.serf.Leave()
 }
 
+// logError will log the non-leader errors at the debug level
 func (m *Membership) logError(err error, msg string, member serf.Member) {
-	m.logger.Error(msg, zap.Error(err), zap.String("name", member.Name), zap.String("rpc_addr", member.Tags["rpc_addr"]))
+	log := m.logger.Error
+	if err == raft.ErrNotLeader {
+		log = m.logger.Debug
+	}
+	log(msg, zap.Error(err), zap.String("name", member.Name), zap.String("rpc_addr", member.Tags["rpc_addr"]))
 }
